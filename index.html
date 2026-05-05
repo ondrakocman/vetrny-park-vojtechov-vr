@@ -38,8 +38,8 @@
   <h1>Větrný Park Vojtěchov – VR</h1>
   <p class="subtitle">Vizualizace větrného parku – dva pohledy</p>
   <div class="buttons">
-    <button class="view-btn" data-video="assets/u-parku.mp4">U Parku</button>
-    <button class="view-btn" data-video="assets/u-prejezdu.mp4">U Přejezdu</button>
+    <button class="view-btn" data-vid="vid-parku">U Parku</button>
+    <button class="view-btn" data-vid="vid-prejezdu">U Přejezdu</button>
   </div>
   <p class="hint">Nasaďte Meta Quest a vyberte pohled.</p>
 </div>
@@ -50,9 +50,11 @@
 
 <a-scene vr-mode-ui="enabled:false" renderer="colorManagement:true;sortObjects:true;antialias:true" loading-screen="enabled:false" webxr="requiredFeatures:local-floor">
   <a-assets timeout="120000">
-    <video id="vid" crossorigin="anonymous" playsinline loop muted preload="auto"></video>
+    <video id="vid-parku" src="assets/u-parku.mp4" crossorigin="anonymous" playsinline loop muted preload="auto"></video>
+    <video id="vid-prejezdu" src="assets/u-prejezdu.mp4" crossorigin="anonymous" playsinline loop muted preload="auto"></video>
   </a-assets>
-  <a-sky id="sky" visible="false" material="shader:flat;src:#vid;side:back"></a-sky>
+  <a-sky id="sky-parku"    visible="false" material="shader:flat;src:#vid-parku;side:back"></a-sky>
+  <a-sky id="sky-prejezdu" visible="false" material="shader:flat;src:#vid-prejezdu;side:back"></a-sky>
   <a-entity id="rig" position="0 1.6 0">
     <a-camera look-controls="pointerLockEnabled:false" wasd-controls="enabled:true;acceleration:20"></a-camera>
   </a-entity>
@@ -64,16 +66,18 @@
   var landing = document.getElementById('landing');
   var loading = document.getElementById('loading-overlay');
   var scene   = document.querySelector('a-scene');
-  var sky     = document.getElementById('sky');
-  var video   = document.getElementById('vid');
+  var SKY = { 'vid-parku': document.getElementById('sky-parku'), 'vid-prejezdu': document.getElementById('sky-prejezdu') };
+  var activeVid = null;
 
   function wait(ms){ return new Promise(function(r){ setTimeout(r, ms) }) }
 
   document.querySelectorAll('.view-btn').forEach(function(btn){
     btn.addEventListener('click', async function(){
+      var vidId = btn.dataset.vid;
+      var video = document.getElementById(vidId);
+      var sky   = SKY[vidId];
+      activeVid = video;
       loading.classList.add('visible');
-      video.src = btn.dataset.video;
-      video.load();
       if(!scene.hasLoaded) await new Promise(function(r){ scene.addEventListener('loaded', r, { once:true }) });
       try{ await scene.enterVR() }catch(e){ console.warn('VR fallback:', e) }
       await wait(300);
@@ -86,8 +90,8 @@
   });
 
   scene.addEventListener('exit-vr', function(){
-    sky.object3D.visible = false;
-    try{ video.pause(); video.currentTime = 0 }catch(e){}
+    Object.values(SKY).forEach(function(s){ s.object3D.visible = false });
+    if(activeVid){ try{ activeVid.pause(); activeVid.currentTime = 0 }catch(e){} activeVid = null; }
     landing.classList.remove('hidden');
   });
 })();
