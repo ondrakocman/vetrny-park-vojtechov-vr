@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Větrný Park Vojtěchov – VR (WebXR Layers)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Montserrat',system-ui,sans-serif;background:#efeae2;color:#222}
+    #landing{position:fixed;inset:0;z-index:9999;background:#efeae2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;transition:opacity .4s}
+    #landing.hidden{opacity:0;pointer-events:none}
+    .logos{display:flex;align-items:center;justify-content:center;gap:48px;margin-bottom:36px;flex-wrap:wrap}
+    .logos img{height:96px;width:auto;object-fit:contain}
+    .logos .noho{height:64px}
+    h1{font-size:clamp(2.2rem,4.6vw,3.6rem);font-weight:800;letter-spacing:.01em;margin-bottom:6px;text-align:center;color:#0a2540}
+    .badge{display:inline-block;background:#0a2540;color:#fff;font-size:.7rem;font-weight:700;letter-spacing:.1em;padding:4px 10px;border-radius:20px;margin-bottom:18px;text-transform:uppercase}
+    .subtitle{color:#777;font-size:1rem;margin-bottom:48px;text-align:center;font-weight:400}
+    .buttons{display:flex;gap:24px;align-items:center;flex-wrap:wrap;justify-content:center}
+    .view-btn{padding:22px 56px;font-size:1.25rem;border:none;border-radius:60px;cursor:pointer;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.05em;transition:transform .15s,box-shadow .15s;font-family:inherit;background:linear-gradient(135deg,#249e6b,#cedc00);box-shadow:0 6px 24px rgba(36,158,107,.35)}
+    .view-btn:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(36,158,107,.45)}
+    .hint{margin-top:32px;color:#888;font-size:.85rem;text-align:center;max-width:480px;line-height:1.5}
+    .nav{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-size:.8rem;color:#888;text-decoration:none}
+    .nav:hover{color:#0a2540}
+    #loading-overlay{position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;color:#fff;font-size:1.2rem}
+    #loading-overlay.visible{display:flex}
+    .spinner{width:44px;height:44px;border:4px solid rgba(255,255,255,.15);border-top-color:#cedc00;border-radius:50%;animation:spin .7s linear infinite;margin-right:14px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    #error{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);background:#b22;color:#fff;padding:10px 18px;border-radius:8px;font-size:.9rem;display:none;max-width:90vw;text-align:center}
+    #error.visible{display:block}
+    video{display:none}
+  </style>
+</head>
+<body>
+
+<div id="landing">
+  <div class="logos">
+    <img class="noho" src="../assets/noho-logo.svg" alt="NOHO" onerror="this.style.display='none'">
+    <img src="../assets/vojtechov-logo.png" alt="Vojtěchov" onerror="this.style.display='none'">
+  </div>
+  <h1>Větrný Park Vojtěchov – VR</h1>
+  <span class="badge">WebXR Layers · experimentální</span>
+  <p class="subtitle">Vizualizace větrného parku – dva pohledy</p>
+  <div class="buttons">
+    <button class="view-btn" data-src="../assets/u-parku.mp4">U Parku</button>
+    <button class="view-btn" data-src="../assets/u-prejezdu.mp4">U Přejezdu</button>
+  </div>
+  <p class="hint">Verze využívající WebXR Media Layers – video se vykresluje přímo systémovým kompozitorem, mimo WebGL texturu.</p>
+  <a class="nav" href="../">← klasická verze</a>
+</div>
+
+<div id="loading-overlay"><div class="spinner"></div><span>Načítání…</span></div>
+<div id="error"></div>
+
+<video id="vid" crossorigin="anonymous" playsinline loop muted preload="auto"></video>
+
+<script>
+(function(){
+  'use strict';
+
+  var landing = document.getElementById('landing');
+  var loading = document.getElementById('loading-overlay');
+  var errorBox = document.getElementById('error');
+  var video = document.getElementById('vid');
+
+  var session = null;
+
+  function showError(msg, ttl){
+    errorBox.textContent = msg;
+    errorBox.classList.add('visible');
+    clearTimeout(showError._t);
+    showError._t = setTimeout(function(){ errorBox.classList.remove('visible') }, ttl || 6000);
+  }
+
+  function endSession(){
+    try{ video.pause(); video.currentTime = 0 }catch(e){}
+    landing.classList.remove('hidden');
+    loading.classList.remove('visible');
+    session = null;
+  }
+
+  async function startSession(srcUrl){
+    if(!('xr' in navigator)){
+      showError('WebXR není v tomto prohlížeči podporováno.');
+      return;
+    }
+    if(typeof XRMediaBinding === 'undefined'){
+      showError('XRMediaBinding (WebXR Layers) není podporováno – použijte klasickou verzi.');
+      return;
+    }
+    var supported = false;
+    try{ supported = await navigator.xr.isSessionSupported('immersive-vr') }catch(e){}
+    if(!supported){
+      showError('VR režim není v tomto zařízení dostupný.');
+      return;
+    }
+
+    loading.classList.add('visible');
+
+    // Preload the video and start playback under user gesture
+    video.src = srcUrl;
+    video.load();
+    try{ await video.play() }catch(e){ console.warn('Video play:', e) }
+
+    try{
+      session = await navigator.xr.requestSession('immersive-vr', {
+        requiredFeatures: ['local-floor', 'layers']
+      });
+    }catch(e){
+      showError('Nelze spustit VR: ' + (e.message || e));
+      loading.classList.remove('visible');
+      return;
+    }
+
+    var refSpace;
+    try{
+      refSpace = await session.requestReferenceSpace('local-floor');
+    }catch(e){
+      refSpace = await session.requestReferenceSpace('local');
+    }
+
+    var mediaBinding = new XRMediaBinding(session);
+    var equirectLayer = mediaBinding.createEquirectLayer(video, {
+      space: refSpace,
+      layout: 'mono'
+    });
+
+    session.updateRenderState({ layers: [equirectLayer] });
+
+    // Keep-alive frame loop. The equirect layer is composited by the system —
+    // we just need to keep ticking so the session stays active.
+    function onFrame(t, frame){
+      if(session) session.requestAnimationFrame(onFrame);
+    }
+    session.requestAnimationFrame(onFrame);
+
+    session.addEventListener('end', endSession);
+
+    landing.classList.add('hidden');
+    loading.classList.remove('visible');
+  }
+
+  document.querySelectorAll('.view-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){ startSession(btn.dataset.src) });
+  });
+})();
+</script>
+</body>
+</html>
